@@ -1,50 +1,35 @@
 # Copyright (c) TorchGeo Contributors. All rights reserved.
 # Licensed under the MIT License.
 
-"""SustainBench Crop Yield dataset."""
+"""SustainBench Crop Yield dataset (Time-Series)."""
 
 import os
 from collections.abc import Callable
 from typing import Any
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from matplotlib.figure import Figure
 from torch import Tensor
+from torch.utils.data import Dataset
 
 from .errors import DatasetNotFoundError
-from .geo import NonGeoDataset
 from .utils import Path, download_url, extract_archive
 
 
-class SustainBenchCropYield(NonGeoDataset):
-    """SustainBench Crop Yield Dataset.
+class SustainBenchCropYield(Dataset):
+    """SustainBench Crop Yield Dataset (Time-Series).
 
-    This dataset contains MODIS band histograms and soybean yield
-    estimates for selected counties in the USA, Argentina and Brazil.
-    The dataset is part of the
-    `SustainBench <https://sustainlab-group.github.io/sustainbench/docs/datasets/sdg2/crop_yield.html>`_
-    datasets for tackling the UN Sustainable Development Goals (SDGs).
+    Groups samples across years for each location/county and returns a
+    full temporal sequence per region instead of individual samples.
 
-    Dataset Format:
-
-    * .npz files of stacked samples
-
-    Dataset Features:
-
-    * input histogram of 7 surface reflectance and 2 surface temperature
-      bands from MODIS pixel values in 32 ranges across 32 timesteps
-      resulting in 32x32x9 input images
-    * regression target value of soybean yield in metric tonnes per
-      harvested hectare
-
-    If you use this dataset in your research, please cite:
-
-    * https://doi.org/10.1145/3209811.3212707
-    * https://doi.org/10.1609/aaai.v31i1.11172
-
-    .. versionadded:: 0.5
+    Each item in the dataset is a dictionary:
+        {
+            "sequence": Tensor [T, C, H, W],
+            "years": Tensor [T],
+            "labels": Tensor [T],
+            "ndvi": Tensor [T, ...],
+            "meta": { "region": str, "country": str }
+        }
     """
 
     valid_countries = ('usa', 'brazil', 'argentina')
@@ -66,29 +51,14 @@ class SustainBenchCropYield(NonGeoDataset):
         download: bool = False,
         checksum: bool = False,
     ) -> None:
-        """Initialize a new Dataset instance.
-
-        Args:
-            root: root directory where dataset can be found
-            split: one of "train", "dev", or "test"
-            countries: which countries to include in the dataset
-            transforms: a function/transform that takes an input sample
-                and returns a transformed version
-            download: if True, download dataset and store it in the root directory
-            checksum: if True, check the MD5 after downloading files (may be slow)
-
-        Raises:
-            AssertionError: if ``countries`` contains invalid countries or if ``split``
-                is invalid
-            DatasetNotFoundError: If dataset is not found and *download* is False.
-        """
+        """Initialize a new Dataset instance."""
         assert set(countries).issubset(self.valid_countries), (
-            f'Please choose a subset of these valid countried: {self.valid_countries}.'
+            f'Please choose a subset of these valid countries: {self.valid_countries}.'
         )
         self.countries = countries
 
         assert split in self.valid_splits, (
-            f'Pleas choose one of these valid data splits {self.valid_splits}.'
+            f'Please choose one of these valid data splits {self.valid_splits}.'
         )
         self.split = split
 
@@ -99,8 +69,8 @@ class SustainBenchCropYield(NonGeoDataset):
 
         self._verify()
 
-        self.images = []
-        self.features = []
+        # region -> list of yearly samples
+        self.groups = {}
 
         for country in self.countries:
             image_file_path = os.path.join(
@@ -116,40 +86,46 @@ class SustainBenchCropYield(NonGeoDataset):
             ndvi_npz_file = np.load(ndvi_file_path)['data']
             num_data_points = npz_file.shape[0]
             for idx in range(num_data_points):
-                sample = npz_file[idx]
-                sample = torch.from_numpy(sample).permute(2, 0, 1).to(torch.float32)
-                self.images.append(sample)
+                image = torch.from_numpy(npz_file[idx]).permute(2, 0, 1).to(torch.float32)
+                label = float(target_npz_file[idx])
+                year = int(year_npz_file[idx])
+                ndvi = torch.from_numpy(ndvi_npz_file[idx]).to(dtype=torch.float32)
 
-                target = target_npz_file[idx]
-                year = year_npz_file[idx]
-                ndvi = ndvi_npz_file[idx]
+                region_id = f"{country}_{idx % 1000}"
 
-                features = {
-                    'label': torch.tensor(target).to(torch.float32),
-                    'year': torch.tensor(int(year)),
-                    'ndvi': torch.from_numpy(ndvi).to(dtype=torch.float32),
+                entry = {
+                    'image': image,
+                    'label': label,
+                    'year': year,
+                    'ndvi': ndvi,
+                    'country': country,
                 }
-                self.features.append(features)
+                self.groups.setdefault(region_id, []).append(entry)
+
+        for region in self.groups:
+            self.groups[region].sort(key=lambda e: e['year'])
+
+        self.keys = list(self.groups.keys())
 
     def __len__(self) -> int:
-        """Return the number of data points in the dataset.
-
-        Returns:
-            length of the dataset
-        """
-        return len(self.images)
+        return len(self.keys)
 
     def __getitem__(self, index: int) -> dict[str, Tensor]:
-        """Return an index within the dataset.
+        region_id = self.keys[index]
+        entries = self.groups[region_id]
 
-        Args:
-            index: index to return
+        sequence = torch.stack([e['image'] for e in entries])  # [T, C, H, W]
+        years = torch.tensor([e['year'] for e in entries], dtype=torch.int32)
+        labels = torch.tensor([e['label'] for e in entries], dtype=torch.float32)
+        ndvi = torch.stack([e['ndvi'] for e in entries])  # [T, ...]
 
-        Returns:
-            data and label at that index
-        """
-        sample: dict[str, Tensor] = {'image': self.images[index]}
-        sample.update(self.features[index])
+        sample: dict[str, Tensor] = {
+            'sequence': sequence,
+            'years': years,
+            'labels': labels,
+            'ndvi': ndvi,
+            'meta': {'region': region_id, 'country': entries[0]['country']},
+        }
 
         if self.transforms is not None:
             sample = self.transforms(sample)
@@ -157,28 +133,22 @@ class SustainBenchCropYield(NonGeoDataset):
         return sample
 
     def _verify(self) -> None:
-        """Verify the integrity of the dataset."""
-        # Check if the extracted files already exist
         pathname = os.path.join(self.root, self.dir)
         if os.path.exists(pathname):
             return
 
-        # Check if the zip files have already been downloaded
         pathname = os.path.join(self.root, self.dir) + '.zip'
         if os.path.exists(pathname):
             self._extract()
             return
 
-        # Check if the user requested to download the dataset
         if not self.download:
             raise DatasetNotFoundError(self)
 
-        # Download the dataset
         self._download()
         self._extract()
 
     def _download(self) -> None:
-        """Download the dataset and extract it."""
         download_url(
             self.url,
             self.root,
@@ -188,47 +158,5 @@ class SustainBenchCropYield(NonGeoDataset):
         self._extract()
 
     def _extract(self) -> None:
-        """Extract the dataset."""
         zipfile_path = os.path.join(self.root, self.dir) + '.zip'
         extract_archive(zipfile_path, self.root)
-
-    def plot(
-        self,
-        sample: dict[str, Any],
-        band_idx: int = 0,
-        show_titles: bool = True,
-        suptitle: str | None = None,
-    ) -> Figure:
-        """Plot a sample from the dataset.
-
-        Args:
-            sample: a sample return by :meth:`__getitem__`
-            band_idx: which of the nine histograms to index
-            show_titles: flag indicating whether to show titles above each panel
-            suptitle: optional suptitle to use for figure
-
-        Returns:
-            a matplotlib Figure with the rendered sample
-
-        """
-        image, label = sample['image'], sample['label'].item()
-
-        showing_predictions = 'prediction' in sample
-        if showing_predictions:
-            prediction = sample['prediction'].item()
-
-        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-
-        ax.imshow(image.permute(1, 2, 0)[:, :, band_idx])
-        ax.axis('off')
-
-        if show_titles:
-            title = f'Label: {label:.3f}'
-            if showing_predictions:
-                title += f'\nPrediction: {prediction:.3f}'
-            ax.set_title(title)
-
-        if suptitle is not None:
-            plt.suptitle(suptitle)
-
-        return fig

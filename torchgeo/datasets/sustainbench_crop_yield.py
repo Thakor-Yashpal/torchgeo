@@ -32,6 +32,7 @@ class SustainBenchCropYield(NonGeoDataset):
         }
     """
 
+
     valid_countries = ('usa', 'brazil', 'argentina')
 
     md5 = '362bad07b51a1264172b8376b39d1fc9'

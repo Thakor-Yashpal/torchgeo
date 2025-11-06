@@ -20,7 +20,7 @@ from torchgeo.datasets.utils import (
 )
 
 
-class ZueriCrop(torch.utils.data.Dataset):
+class ZueriCrop(torch.utils.data.Dataset[dict[str, Tensor]]):
     """ZueriCrop dataset (Time-Series).
 
     Groups the full Sentinel-2 time-series for each field instance
@@ -68,21 +68,17 @@ class ZueriCrop(torch.utils.data.Dataset):
             mask = f['gt'][index]  # [H, W, C]
             instance_mask = f['gt_instance'][index]
 
-        # Convert data
         image = torch.from_numpy(data).permute(0, 3, 1, 2)  # [T, C, H, W]
         image = torch.index_select(image, dim=1, index=self.band_indices)
 
-        # Convert masks
         mask_tensor = torch.from_numpy(mask).permute(2, 0, 1)
         instance_tensor = torch.from_numpy(instance_mask).permute(2, 0, 1)
 
-        # Parse instance masks
         instance_ids = torch.unique(instance_tensor)
         instance_ids = instance_ids[instance_ids != 0]
         instance_ids = instance_ids[:, None, None]
         masks = instance_tensor == instance_ids
 
-        # Labels and boxes
         labels_list = []
         boxes_list = []
         for m in masks:
@@ -97,7 +93,7 @@ class ZueriCrop(torch.utils.data.Dataset):
         boxes = torch.tensor(boxes_list).float()
         labels = torch.tensor(labels_list).long()
 
-        sample = {
+        sample: dict[str, Tensor] = {
             'sequence': image,  # [T, C, H, W]
             'mask': masks,
             'bbox_xyxy': boxes,

@@ -108,17 +108,17 @@ class SustainBenchCropYield(Dataset):
         self.keys = list(self.groups.keys())
 
     def __len__(self) -> int:
+        """Return the number of regions in the dataset."""
         return len(self.keys)
 
     def __getitem__(self, index: int) -> dict[str, Tensor]:
+        """Return the full time-series sample for a given region."""
         region_id = self.keys[index]
         entries = self.groups[region_id]
-
-        sequence = torch.stack([e['image'] for e in entries])  # [T, C, H, W]
+        sequence = torch.stack([e['image'] for e in entries])
         years = torch.tensor([e['year'] for e in entries], dtype=torch.int32)
         labels = torch.tensor([e['label'] for e in entries], dtype=torch.float32)
-        ndvi = torch.stack([e['ndvi'] for e in entries])  # [T, ...]
-
+        ndvi = torch.stack([e['ndvi'] for e in entries])
         sample: dict[str, Tensor] = {
             'sequence': sequence,
             'years': years,
@@ -126,10 +126,9 @@ class SustainBenchCropYield(Dataset):
             'ndvi': ndvi,
             'meta': {'region': region_id, 'country': entries[0]['country']},
         }
-
         if self.transforms is not None:
             sample = self.transforms(sample)
-
+            
         return sample
 
     def _verify(self) -> None:

@@ -22,6 +22,7 @@ class SustainBenchCropYield(NonGeoDataset):
     full temporal sequence per region instead of individual samples.
 
     Each item in the dataset is a dictionary:
+
         {
             "sequence": Tensor [T, C, H, W],
             "years": Tensor [T],

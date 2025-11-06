@@ -15,7 +15,7 @@ from .geo import NonGeoDataset
 from .utils import Path, download_url, extract_archive
 
 
-class SustainBenchCropYield(NonGeoDataset[dict[str, Any]]):
+class SustainBenchCropYield(NonGeoDataset):
     """SustainBench Crop Yield Dataset (Time-Series).
 
     Groups samples across years for each location/county and returns a

@@ -28,7 +28,6 @@ class ZueriCrop(torch.utils.data.Dataset[dict[str, Tensor]]):
 
     """
 
-
     url = 'https://hf.co/datasets/isaaccorley/zuericrop/resolve/8ac0f416fbaab032d8670cc55f984b9f079e86b2/'
     md5s = ('1635231df67f3d25f4f1e62c98e221a4', '5118398c7a5bbc246f5f6bb35d8d529b')
     filenames = ('ZueriCrop.hdf5', 'labels.csv')

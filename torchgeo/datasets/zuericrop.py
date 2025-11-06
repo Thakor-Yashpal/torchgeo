@@ -25,6 +25,7 @@ class ZueriCrop(torch.utils.data.Dataset[dict[str, Tensor]]):
 
     Groups the full Sentinel-2 time-series for each field instance
     instead of returning single time steps.
+
     """
 
     url = 'https://hf.co/datasets/isaaccorley/zuericrop/resolve/8ac0f416fbaab032d8670cc55f984b9f079e86b2/'

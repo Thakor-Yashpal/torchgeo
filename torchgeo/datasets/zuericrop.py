@@ -65,7 +65,7 @@ class ZueriCrop(torch.utils.data.Dataset):
 
         with h5py.File(self.filepath, 'r') as f:
             data = f['data'][index]  # [T, H, W, C]
-            mask = f['gt'][index]    # [H, W, C]
+            mask = f['gt'][index]  # [H, W, C]
             instance_mask = f['gt_instance'][index]
 
         # Convert data
@@ -98,7 +98,7 @@ class ZueriCrop(torch.utils.data.Dataset):
         labels = torch.tensor(labels_list).long()
 
         sample = {
-            'sequence': image,          # [T, C, H, W]
+            'sequence': image,  # [T, C, H, W]
             'mask': masks,
             'bbox_xyxy': boxes,
             'label': labels,
@@ -112,6 +112,7 @@ class ZueriCrop(torch.utils.data.Dataset):
     def __len__(self) -> int:
         """Return number of crop instances."""
         import h5py
+
         with h5py.File(self.filepath, 'r') as f:
             length: int = f['data'].shape[0]
         return length

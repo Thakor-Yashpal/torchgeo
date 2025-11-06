@@ -86,12 +86,14 @@ class SustainBenchCropYield(Dataset):
             ndvi_npz_file = np.load(ndvi_file_path)['data']
             num_data_points = npz_file.shape[0]
             for idx in range(num_data_points):
-                image = torch.from_numpy(npz_file[idx]).permute(2, 0, 1).to(torch.float32)
+                image = (
+                    torch.from_numpy(npz_file[idx]).permute(2, 0, 1).to(torch.float32)
+                )
                 label = float(target_npz_file[idx])
                 year = int(year_npz_file[idx])
                 ndvi = torch.from_numpy(ndvi_npz_file[idx]).to(dtype=torch.float32)
 
-                region_id = f"{country}_{idx % 1000}"
+                region_id = f'{country}_{idx % 1000}'
 
                 entry = {
                     'image': image,
@@ -128,7 +130,7 @@ class SustainBenchCropYield(Dataset):
         }
         if self.transforms is not None:
             sample = self.transforms(sample)
-            
+
         return sample
 
     def _verify(self) -> None:
